@@ -316,7 +316,17 @@ update_time_end:
 			add di, ax
 			mov byte ptr es:[di+1], 01000000b
 			add si, 2
-			loop draws	
+			loop draws
+			mov bl, ds:[snake]
+			mov bh, ds:[snake+1]
+			mov al, 160
+			mul bh
+			mov di, ax
+			mov al, 2
+			mul bl
+			add di, ax
+			mov byte ptr es:[di], ':'
+			mov byte ptr es:[di+1], 01000010b
 		pop si
 		pop di
 		pop cx
@@ -341,7 +351,8 @@ update_time_end:
 			mov al, 2
 			mul bl
 			add di, ax
-			mov byte ptr es:[di+1], 01100000b
+			mov byte ptr es:[di], 3
+			mov byte ptr es:[di+1], 00000110b
 		pop ax
 		pop di
 		pop es
