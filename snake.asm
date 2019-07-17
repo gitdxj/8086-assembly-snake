@@ -1,9 +1,15 @@
+;显存地址0xb8000-0xbffff共32KB的空间，为80*25彩色字符模式的显示缓冲区，向这个地址空间写入数据，写入的内容立即出现在显示器上
+;25行*80个字符，字符一个字节，属性一个字节
+;BL  R G B  I  R G B
+;   ------     ----- 
+;闪烁 背景 高亮 前景
+
 assume cs:code, ds:data, ss:stack
 
 data segment
 	time dw 0
 	score dw 0
-	snake db 40, 12, 2046 dup (0)
+	snake db 40, 12, 2046 dup (0)   ; 列行列行
 	len dw 1
 	gameEnd db 'game over'
 	fruit db 20, 7
@@ -33,14 +39,16 @@ code segment
 		 continue_game:	call getInput
 					mov dl, snake[0]				; detect if input is valid
 					mov dh, snake[1]
-					cmp ah, 48h					
+					; 检查键盘扫描码
+					cmp ah, 48h			      ; 48H 对应上箭头
 					je detect_upper_pixel
-					cmp ah, 50h
+					cmp ah, 50h			      ; 50H 对应左箭头
 					je detect_lower_pixel
-					cmp ah, 4bh
+					cmp ah, 4bh			      ; 4BH 对应下箭头
 					je detect_left_pixel
-					cmp ah, 4dh
+					cmp ah, 4dh			      ; 4DH 对应右箭头
 					je detect_right_pixel
+						; dh 行  dl 列
 						detect_upper_pixel: dec dh
 								    cmp dl, snake[2]
 								    jne ok_to_turn
@@ -65,6 +73,7 @@ code segment
 								    cmp dh, snake[3]
 								    je not_ok_to_turn
 								    jmp short ok_to_turn
+				; 防止反向
 			    ok_to_turn: pop dx
 					jmp short detect_fruit
 		        not_ok_to_turn: pop ax
@@ -136,18 +145,18 @@ code segment
 			push di
 			push ax
 				jmp short initbeg
-				start_label: db 'start'
-				quit_label: db ' quit'
+				start_label db 'start'
+				quit_label db ' quit'
 
-		       initbeg:	mov bx, 0b800h
+		       initbeg:	mov bx, 0b800h     ; 显存地址 DOS模式下每一行占用160字节显存
 				mov es, bx
 				mov bx, cs
 				mov ds, bx
 
 				mov si, offset start_label
-				mov di, 160*10+30*2
+				mov di, 160*10+30*2        ; di对应dos坐标
 				mov cx, 5
-			 copy1:	mov bl, ds:[si]
+			 copy1:	mov bl, ds:[si]        ; ds:[si] -> 'start'
 				mov es:[di], bl
 				add di, 2
 				inc si
@@ -155,7 +164,7 @@ code segment
 				
 				add di, 4
 				mov byte ptr es:[di], '*'		; select start
-				mov byte ptr es:[di+1], 10000111b
+				mov byte ptr es:[di+1], 10000111b  ; ?
 				
 				mov si, offset quit_label
 				mov di, 160*12+30*2
@@ -181,14 +190,14 @@ code segment
 				mov byte ptr es:[di], ' '
 				mov di, 160*12 + 30*2+5*2 + 4
 				mov byte ptr es:[di], '*'
-				mov byte ptr es:[di+1], 10000111b
+				mov byte ptr es:[di+1], 10000111b  ;闪烁
 				jmp short select
 
 		      to_start: mov di, 160*12 + 30*2+5*2 + 4
 				mov byte ptr es:[di], ' '
 				mov di, 160*10 + 30*2+5*2 + 4
 				mov byte ptr es:[di], '*'
-				mov byte ptr es:[di+1], 10000111b
+				mov byte ptr es:[di+1], 10000111b  ;闪烁
 				jmp short select
 
 		      to_enter: mov al, es:[160*10 + 30*2+5*2 + 4]	
@@ -196,7 +205,7 @@ code segment
 				je game_begin
 				jmp short initialret
 
-		    game_begin: call clear				; clear screen and begin game
+		    game_begin: call clear		
 				call gamescreen
 
 	    initialret: pop ax
@@ -284,8 +293,8 @@ code segment
 
    update_time: push ax
 			mov al, 0
-			out 70h, al
-			in al, 71h
+			out 70h, al   ; 读取cmos的0 地址的内容
+			in al, 71h	  ; 将读取的1个字节存到al寄存器
 			cmp al, current_sec[0]
 			je update_time_end
 			inc time[0]
@@ -314,9 +323,9 @@ update_time_end:
 			mov al, 2
 			mul bl				; bl is column		
 			add di, ax
-			mov byte ptr es:[di+1], 01000000b
+			mov byte ptr es:[di+1], 01000000b  ; 属性：红色背景
 			add si, 2
-			loop draws
+			loop draws        ; 循环次数是蛇的长度
 			mov bl, ds:[snake]
 			mov bh, ds:[snake+1]
 			mov al, 160
@@ -325,7 +334,7 @@ update_time_end:
 			mov al, 2
 			mul bl
 			add di, ax
-			mov byte ptr es:[di], ':'
+			mov byte ptr es:[di], ':'   ; 蛇头是冒号
 			mov byte ptr es:[di+1], 01000010b
 		pop si
 		pop di
@@ -395,8 +404,8 @@ update_time_end:
 			cmp al, 1
 			je len_change
 	
-	 len_no_change: mov si, 0				; snake head
-			mov bl, ds:[si+snake]			; bx store previous block
+	 len_no_change: mov si, 0				; 蛇头
+			mov bl, ds:[si+snake]
 			mov bh, ds:[si+snake+1]
 			cmp ah, 48h
 			je moveup
@@ -408,24 +417,26 @@ update_time_end:
 			je moveright
 			jmp short update_snake_ret
 
-			moveup: dec byte ptr ds:[si+snake+1]		; move up (row - 1)
+			; 调整蛇头
+			moveup: dec byte ptr ds:[si+snake+1]		; 上移 (行 - 1)
 				jmp short movebody
-		      movedown:	inc byte ptr ds:[si+snake+1]		; move down (row + 1)
+		      movedown:	inc byte ptr ds:[si+snake+1]	; 下移 (行 + 1)
 				jmp short movebody
-		      moveleft: dec byte ptr ds:[si+snake]		; move left (column - 1)
+		      moveleft: dec byte ptr ds:[si+snake]		; 左移 (列 - 1)
 				jmp short movebody
-		     moveright:	inc byte ptr ds:[si+snake]		; move right (column + 1)
+		     moveright:	inc byte ptr ds:[si+snake]		; 右移 (列 + 1)
 				jmp short movebody
 
 		      movebody: mov cx, len
-				dec cx				; update body after head
+				dec cx				
 				jcxz update_snake_ret
 				mov si, 2
-		        movelp: mov al, snake[si]
+				; 下一节点赋予上一节点的坐标
+		        movelp: mov al, snake[si]   
 				mov ah, snake[si+1]
 				mov snake[si], bl
 				mov snake[si+1], bh
-				mov bx, ax			; exchange data in bx and ds:[si]
+				mov bx, ax
 				add si, 2
 				loop movelp
 				jmp update_snake_ret				
@@ -434,13 +445,13 @@ update_time_end:
 			mov di, si
 			add di, si
 			mov al, snake[di-2]
-			mov ah, snake[di-1]
-			inc al
+			mov ah, snake[di-1]  ; 最后一个节点坐标
+			inc al               
 			mov snake[di], al
-			mov snake[di+1], ah
+			mov snake[di+1], ah  ; 新增加的节点
 			inc si
-			mov ds:[len], si			; length increase
-			inc ds:[score]				; increase score		
+			mov ds:[len], si	 ; 长度加1
+			inc ds:[score]		 ; 分数加1		
 			call refresh_fruit
 			jmp len_no_change
 			
@@ -465,11 +476,12 @@ update_snake_ret: pop cx
 	pop ax
 	ret
 
+; 若缓冲区有值，存入ax中，AH扫描码，AL中ASCII码
 getInput: push bx
 	  push ax
 	  mov al, 0
 	  mov ah, 1
-	  int 16h
+	  int 16h  ; 检查缓冲区，非阻塞，非空则ZF=0，AL中存字符ASCII码，AH放键盘扫描码
 	  cmp ah, 1
 	  je getInputEnd
 	  mov al, 0	
@@ -482,8 +494,9 @@ getInputEnd: pop ax
 	     pop bx
 getInputRet: ret 
 
-	; store random number in ah
-	; bl-1 is the upperbound of random rumber
+
+	; 在ah中存生成的随机数
+	; bl是上界
 getRandom: mov ax, 0
 	   out 43h, al
 	   in al, 40h
@@ -637,6 +650,7 @@ print_score_lp:	mov dx, 0
 
 code ends
 end start
+
 
 
 
